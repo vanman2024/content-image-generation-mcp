@@ -2,38 +2,60 @@
 
 AI-powered content and image generation FastMCP server with Google Imagen 3/4 image generation, Veo 2/3 video generation, and Claude/Gemini content generation.
 
+**Production Ready**: Deploy to FastMCP Cloud in 5 minutes!
+
+[![Deploy to FastMCP Cloud](https://img.shields.io/badge/Deploy-FastMCP%20Cloud-blue)](https://cloud.fastmcp.com)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![FastMCP](https://img.shields.io/badge/FastMCP-2.13.0+-green.svg)](https://gofastmcp.com)
+
+## Quick Links
+
+- **[5-Minute Deployment Guide](./docs/deployment/QUICK_START.md)** - Get started fast
+- **[Complete Deployment Guide](./docs/deployment/FASTMCP_CLOUD_DEPLOYMENT.md)** - Detailed instructions
+- **[Deployment Checklist](./docs/deployment/DEPLOYMENT_CHECKLIST.md)** - Ensure nothing is missed
+
 ## Features
 
 ### Tools
 
-1. **generate_image_imagen3** - Generate high-quality marketing images
+1. **health_check** - Server health and monitoring
+   - Verify server health and API connectivity
+   - Check service availability (Google AI, Anthropic)
+   - Output directory validation
+   - Perfect for monitoring deployments
+
+2. **generate_image_imagen3** - Generate high-quality marketing images
    - Google Imagen 3/4 integration
    - Multiple aspect ratios (1:1, 16:9, 9:16, 4:3, 3:4)
-   - SD and HD quality options
+   - 1K and 2K resolution options
    - Negative prompts for better control
-   - Reproducible results with seed parameter
+   - Production-ready with error handling
 
-2. **batch_generate_images** - Generate multiple images efficiently
+3. **batch_generate_images** - Generate multiple images efficiently
    - Batch processing for campaigns
    - Cost tracking across multiple images
    - Consistent quality and style
+   - Detailed success/failure reporting
 
-3. **generate_video_veo3** - Create marketing videos
-   - Google Veo 2/3 integration (preview)
-   - Customizable duration and resolution
+4. **generate_video_veo3** - Create marketing videos
+   - Google Veo 3 integration
+   - Customizable duration (4, 6, 8 seconds)
+   - 720p and 1080p resolution
+   - Native audio generation
    - Cost estimation per second
 
-4. **generate_marketing_content** - AI-powered copywriting
+5. **generate_marketing_content** - AI-powered copywriting
    - Multiple content types (social posts, blog intros, ad copy, email subjects, product descriptions)
-   - Choice of Claude Sonnet 4 or Gemini 2.0 Flash
+   - Choice of Claude Sonnet 4 or Gemini 2.5 Flash Image
    - Tone customization (professional, casual, enthusiastic, formal)
    - Length control (short, medium, long)
    - Optional hashtag generation
 
-5. **calculate_cost_estimate** - Campaign budget planning
-   - Detailed cost breakdown
+6. **calculate_cost_estimate** - Campaign budget planning
+   - Detailed cost breakdown by service
    - Support for multiple models
    - Per-resource pricing
+   - Campaign planning assistant
 
 ### Resources
 
@@ -270,42 +292,100 @@ Generated content is saved to the `output/` directory:
 
 ## Deployment
 
-### Vercel (HTTP Mode)
+### FastMCP Cloud (Recommended)
 
-1. Set environment variables in Vercel dashboard
-2. Deploy the server:
-```bash
-vercel --prod
+**Quick Deployment**: Deploy to production in 5 minutes!
+
+1. **Visit**: https://cloud.fastmcp.com
+2. **Sign in with GitHub**
+3. **Create new project**:
+   - Repository: `vanman2024/content-image-generation-mcp`
+   - Entrypoint: `server.py:mcp`
+4. **Set environment variable**: `GOOGLE_API_KEY=<your-key>`
+5. **Deploy**
+
+Your server will be available at:
+```
+https://content-image-generation-mcp.fastmcp.app/mcp
 ```
 
-### FastMCP Cloud
+**Full Documentation**:
+- [Quick Start Guide](./docs/deployment/QUICK_START.md) - 5-minute deployment
+- [Complete Deployment Guide](./docs/deployment/FASTMCP_CLOUD_DEPLOYMENT.md) - Detailed instructions
+- [Deployment Checklist](./docs/deployment/DEPLOYMENT_CHECKLIST.md) - Step-by-step checklist
 
-1. Sign up at https://fastmcp.com
-2. Deploy using FastMCP CLI:
+**Validation** (optional but recommended):
 ```bash
-fastmcp deploy
+./scripts/validate-deployment.sh
 ```
 
-### Docker
+### Production Features
 
+Your deployment includes:
+- ✅ Structured logging with configurable levels
+- ✅ Health check endpoint for monitoring
+- ✅ Error handling and API validation
+- ✅ Automatic redeployment on git push
+- ✅ Zero-downtime deployments
+- ✅ Cost tracking and estimation
+
+### IDE Integration
+
+After deploying, connect from your IDE:
+
+**Claude Desktop** (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "content-image-generation": {
+      "url": "https://content-image-generation-mcp.fastmcp.app/mcp",
+      "transport": "sse"
+    }
+  }
+}
+```
+
+**Cursor** (`.cursor/mcp_config.json`):
+```json
+{
+  "mcpServers": {
+    "content-image-generation": {
+      "url": "https://content-image-generation-mcp.fastmcp.app/mcp",
+      "transport": "sse"
+    }
+  }
+}
+```
+
+### Alternative Deployment Options
+
+**Local Development (STDIO)**:
+```bash
+python server.py
+# or
+fastmcp run server.py
+```
+
+**HTTP Server**:
+```bash
+python server.py --http
+# Server runs on http://0.0.0.0:8000
+```
+
+**Docker**:
 ```dockerfile
 FROM python:3.10-slim
-
 WORKDIR /app
 COPY . .
-
-RUN pip install -e .
-
-ENV GOOGLE_CLOUD_PROJECT=""
-ENV ANTHROPIC_API_KEY=""
-
+RUN pip install -r requirements.txt
+ENV GOOGLE_API_KEY=""
 CMD ["python", "server.py", "--http"]
 ```
 
 Build and run:
 ```bash
-docker build -t marketing-automation .
-docker run -p 8000:8000 --env-file .env marketing-automation
+docker build -t content-image-generation-mcp .
+docker run -p 8000:8000 -e GOOGLE_API_KEY=your_key content-image-generation-mcp
 ```
 
 ## Troubleshooting

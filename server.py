@@ -11,6 +11,7 @@ AI-powered content and image generation with:
 import os
 import json
 import base64
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -28,8 +29,22 @@ from google.genai import types
 # Load environment variables
 load_dotenv()
 
+# Configure logging for production
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Initialize FastMCP server
 mcp = FastMCP(name=os.getenv("MCP_SERVER_NAME", "Content & Image Generation"))
+
+# Log startup
+logger.info(f"Starting {mcp.name} server")
 
 # Configuration
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "output"))
@@ -38,14 +53,26 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # Initialize Google Gen AI Client
 google_api_key = os.getenv("GOOGLE_API_KEY")
 if not google_api_key:
+    logger.error("GOOGLE_API_KEY environment variable is required")
     raise ValueError("GOOGLE_API_KEY environment variable is required")
 
-genai_client = genai.Client(api_key=google_api_key)
+try:
+    genai_client = genai.Client(api_key=google_api_key)
+    logger.info("Google Gen AI client initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Google Gen AI client: {e}")
+    raise
 
 # Initialize Anthropic
 anthropic_client = None
 if os.getenv("ANTHROPIC_API_KEY"):
-    anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    try:
+        anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        logger.info("Anthropic client initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Anthropic client: {e}")
+else:
+    logger.info("Anthropic API key not provided - Claude content generation will be unavailable")
 
 
 # Pricing Constants (USD per unit) - Updated from official docs
@@ -63,6 +90,37 @@ PRICING = {
     "claude_sonnet": 0.003,
     "gemini_flash": 0.0005,
 }
+
+
+@mcp.tool()
+def health_check() -> Dict[str, Any]:
+    """
+    Check server health and API connectivity.
+
+    Returns:
+        Dictionary with health status and available services
+    """
+    try:
+        health_status = {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "services": {
+                "google_genai": bool(google_api_key),
+                "anthropic": bool(anthropic_client),
+            },
+            "output_directory": str(OUTPUT_DIR.absolute()),
+            "output_directory_writable": OUTPUT_DIR.is_dir() and os.access(OUTPUT_DIR, os.W_OK)
+        }
+
+        logger.info("Health check passed")
+        return health_status
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 
 @mcp.tool()
@@ -90,6 +148,7 @@ def generate_image_imagen3(
     Returns:
         Dictionary with image paths, metadata, and estimated cost
     """
+    logger.info(f"Generating {number_of_images} image(s) with {model_version}: {prompt[:50]}...")
     try:
         # Validate
         if number_of_images < 1 or number_of_images > 4:
@@ -143,6 +202,7 @@ def generate_image_imagen3(
 
         total_cost = cost_per_image * number_of_images
 
+        logger.info(f"Successfully generated {number_of_images} image(s) with {model_version} (cost: ${total_cost:.4f})")
         return {
             "success": True,
             "images": saved_images,
@@ -157,6 +217,7 @@ def generate_image_imagen3(
         }
 
     except Exception as e:
+        logger.error(f"Image generation failed: {e}")
         return {
             "success": False,
             "error": str(e),
