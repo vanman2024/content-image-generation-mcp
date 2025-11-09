@@ -224,13 +224,27 @@ def generate_video_veo3(
                 "success": False
             }
 
-        # Note: Veo 3 API is in preview, this is a placeholder implementation
-        # Model: veo-3.0-generate-001
-        # Replace with actual Vertex AI Veo API when available
+        # Initialize Veo 3 model
+        # Note: Using GenerativeModel for Veo video generation
+        model = GenerativeModel("veo-3.0-generate-001")
 
+        # Generate video
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.7,
+                "top_p": 0.9,
+            }
+        )
+
+        # Save video
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"veo3_{timestamp}.mp4"
         filepath = OUTPUT_DIR / filename
+
+        # Write video bytes to file
+        with open(filepath, 'wb') as f:
+            f.write(response.candidates[0].content.parts[0].inline_data.data)
 
         # Calculate cost based on duration
         cost = PRICING["veo3"] * duration_seconds
@@ -245,8 +259,7 @@ def generate_video_veo3(
             "resolution": resolution,
             "fps": fps,
             "estimated_cost_usd": round(cost, 4),
-            "timestamp": timestamp,
-            "note": "Veo API integration pending - placeholder response"
+            "timestamp": timestamp
         }
 
     except Exception as e:
@@ -313,13 +326,13 @@ Make it compelling, engaging, and ready to use for marketing purposes."""
             cost = (tokens_used / 1000) * PRICING["claude_sonnet"]
 
         elif model == "gemini" or not anthropic_client:
-            # Using Gemini 2.0 Flash
-            gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+            # Using Gemini Flash Latest
+            gemini_model = genai.GenerativeModel("gemini-flash-latest")
             response = gemini_model.generate_content(prompt_base)
             content = response.text
             # Approximate token count
             tokens_used = len(content.split()) * 1.3
-            model_used = "gemini-2.0-flash"
+            model_used = "gemini-flash-latest"
             cost = (tokens_used / 1000) * PRICING["gemini_pro"]
 
         else:
@@ -479,7 +492,7 @@ def get_available_models() -> str:
                 "strengths": ["creative writing", "nuanced tone", "long-form content"]
             },
             "gemini": {
-                "model": "gemini-2.0-flash",
+                "model": "gemini-flash-latest",
                 "strengths": ["fast generation", "cost-effective", "multilingual", "multimodal"]
             }
         }
