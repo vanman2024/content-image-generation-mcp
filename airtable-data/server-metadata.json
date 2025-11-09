@@ -1,0 +1,19 @@
+{
+  "airtable_record_id": "recSJLUXGrI9fQNkf",
+  "server_name": "mcp__content-image-generation",
+  "description": "AI content and image generation (Google Imagen, Gemini)",
+  "purpose": "Generate images, text, video with AI models",
+  "server_type": "STDIO (Python)",
+  "deployment_method": "Python Script",
+  "fastmcp_cloud_status": "Not Deployed",
+  "fastmcp_cloud_url": null,
+  "local_port": null,
+  "package_source": "Custom Python MCP (Google Imagen/Gemini)",
+  "connection": "python /home/gotime2022/.claude/plugins/marketplaces/mcp-servers-marketplace/servers/content-media/content-image-generation-mcp/src/server.py",
+  "config_path": ".mcp.json (global)",
+  "environment_variables": "GOOGLE_CLOUD_PROJECT\nANTHROPIC_API_KEY\nGOOGLE_API_KEY",
+  "available_tools": null,
+  "security_notes": "Requires Google Cloud project and API keys",
+  "agent_count": 0,
+  "last_synced": "2025-11-09T21:19:19.010114Z"
+}
