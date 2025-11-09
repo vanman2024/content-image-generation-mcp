@@ -21,8 +21,9 @@ from dotenv import load_dotenv
 # Anthropic Claude
 from anthropic import Anthropic
 
-# Google Generative AI (Gemini API)
-import google.generativeai as genai
+# Google Gen AI SDK (New unified SDK for Imagen, Veo, and Gemini)
+from google import genai
+from google.genai import types
 
 # Load environment variables
 load_dotenv()
@@ -34,16 +35,17 @@ mcp = FastMCP(name=os.getenv("MCP_SERVER_NAME", "Content & Image Generation"))
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "output"))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# Initialize Google Gen AI Client
+google_api_key = os.getenv("GOOGLE_API_KEY")
+if not google_api_key:
+    raise ValueError("GOOGLE_API_KEY environment variable is required")
+
+genai_client = genai.Client(api_key=google_api_key)
+
 # Initialize Anthropic
 anthropic_client = None
 if os.getenv("ANTHROPIC_API_KEY"):
     anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-
-# Initialize Gemini API
-if os.getenv("GOOGLE_API_KEY"):
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-else:
-    raise ValueError("GOOGLE_API_KEY environment variable is required")
 
 
 # Pricing Constants (USD per unit) - Updated from official docs
@@ -71,89 +73,71 @@ def generate_image_imagen3(
     number_of_images: int = 1,
     image_size: str = "1K",
     output_format: str = "png",
-    model_version: str = "imagen-3.0",
+    model_version: str = "imagen-4.0",
 ) -> Dict[str, Any]:
     """
-    Generate marketing images using Google Imagen 3/4 via Gemini API.
+    Generate marketing images using Google Imagen via Gemini API.
 
     Args:
-        prompt: Detailed description of the image to generate (max 480 tokens)
+        prompt: Detailed description of the image to generate
         negative_prompt: What to avoid in the image
         aspect_ratio: Image aspect ratio - "1:1", "3:4", "4:3", "9:16", "16:9"
         number_of_images: Number of images to generate (1-4)
-        image_size: Image size - "1K" or "2K" (2K only for Standard/Ultra models)
-        output_format: Output format (png, jpeg, webp)
-        model_version: Model to use - "imagen-3.0" or "imagen-4.0"
+        image_size: Image size - "1K" or "2K"
+        output_format: Output format (png, jpeg)
+        model_version: Model - "imagen-3.0", "imagen-4.0", "imagen-4.0-ultra", "imagen-4.0-fast"
 
     Returns:
         Dictionary with image paths, metadata, and estimated cost
     """
     try:
-        if not os.getenv("GOOGLE_API_KEY"):
-            return {
-                "error": "GOOGLE_API_KEY not configured",
-                "success": False
-            }
-
-        # Validate parameters
+        # Validate
         if number_of_images < 1 or number_of_images > 4:
             number_of_images = 1
 
-        # Map model version to Gemini API model ID
+        # Map to actual model IDs
         model_map = {
             "imagen-3.0": "imagen-3.0-generate-002",
             "imagen-4.0": "imagen-4.0-generate-001",
             "imagen-4.0-ultra": "imagen-4.0-ultra-generate-001",
             "imagen-4.0-fast": "imagen-4.0-fast-generate-001"
         }
+        model_id = model_map.get(model_version, "imagen-4.0-generate-001")
 
-        model_id = model_map.get(model_version, "imagen-3.0-generate-002")
-
-        # Initialize Gemini model for image generation
-        model = genai.GenerativeModel(model_id)
-
-        # Generate images using Gemini API
-        config = {
-            "number_of_images": number_of_images,
-            "aspect_ratio": aspect_ratio,
-        }
-
-        # Only Standard/Ultra models support 2K
-        if image_size == "2K" and "fast" not in model_id.lower():
-            config["image_size"] = "2K"
-
-        if negative_prompt:
-            config["negative_prompt"] = negative_prompt
-
-        # Generate images
-        response = model.generate_images(
+        # Generate images using new google-genai SDK
+        response = genai_client.models.generate_images(
+            model=model_id,
             prompt=prompt,
-            config=config
+            config=types.GenerateImagesConfig(
+                number_of_images=number_of_images,
+                image_size=image_size if image_size in ["1K", "2K"] else "1K",
+                aspect_ratio=aspect_ratio,
+                person_generation="allow_adult",
+            ),
         )
 
-        # Save all generated images
+        # Save all images
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saved_images = []
 
-        for i, image in enumerate(response.images):
+        for i, generated_image in enumerate(response.generated_images):
             filename = f"imagen_{model_version}_{timestamp}_{i+1}.{output_format}"
             filepath = OUTPUT_DIR / filename
 
-            # Decode base64 and save
-            import base64
-            image_bytes = base64.b64decode(image.data)
-
-            with open(filepath, 'wb') as f:
-                f.write(image_bytes)
+            # Save image
+            generated_image.image.save(str(filepath))
 
             saved_images.append({
                 "image_path": str(filepath.absolute()),
                 "filename": filename
             })
 
-        # Calculate cost based on model and size
+        # Calculate cost
         if "4.0" in model_version:
-            cost_per_image = 0.04 if image_size == "1K" else 0.08
+            if "ultra" in model_version.lower():
+                cost_per_image = 0.12 if image_size == "2K" else 0.08
+            else:
+                cost_per_image = 0.04 if image_size == "1K" else 0.08
         else:  # Imagen 3.0
             cost_per_image = 0.02 if image_size == "1K" else 0.04
 
@@ -257,11 +241,7 @@ def generate_video_veo3(
         Dictionary with video path, metadata, and estimated cost
     """
     try:
-        if not os.getenv("GOOGLE_API_KEY"):
-            return {
-                "error": "GOOGLE_API_KEY not configured",
-                "success": False
-            }
+        import time
 
         # Validate parameters
         if duration_seconds not in [4, 6, 8]:
@@ -273,30 +253,20 @@ def generate_video_veo3(
                 "success": False
             }
 
-        # Initialize Gemini client for video generation
-        import time
-
-        # Generate video using Gemini API's long-running operation pattern
-        # Model: veo-3.0-generate-001 (stable) or veo-3.1-generate-preview
-        model = genai.GenerativeModel("veo-3.0-generate-001")
-
-        # Start video generation operation
-        config = {
-            "aspect_ratio": aspect_ratio,
-            "resolution": resolution,
-            "duration_seconds": str(duration_seconds)
-        }
-
-        if negative_prompt:
-            config["negative_prompt"] = negative_prompt
-
-        # Note: Gemini API uses generate_videos() which returns a long-running operation
-        # This is a synchronous wrapper - in production, use async polling
-        operation = genai.models.generate_videos(
-            model="veo-3.0-generate-001",
+        # Generate video using new google-genai SDK
+        operation = genai_client.models.generate_videos(
+            model="veo-3.1-generate-preview",
             prompt=prompt,
-            config=config
+            config=types.GenerateVideosConfig(
+                aspect_ratio=aspect_ratio,
+                resolution=resolution,
+                duration_seconds=duration_seconds,
+                negative_prompt=negative_prompt if negative_prompt else None,
+                number_of_videos=1,
+            ),
         )
+
+        print(f"⏳ Video generation started... (this may take 2-6 minutes)")
 
         # Poll until completion (max 6 minutes per docs)
         max_wait = 360  # 6 minutes
@@ -304,7 +274,9 @@ def generate_video_veo3(
         while not operation.done and waited < max_wait:
             time.sleep(10)
             waited += 10
-            operation = genai.operations.get(operation.name)
+            operation = genai_client.operations.get(operation)
+            if waited % 30 == 0:
+                print(f"   ... {waited}s elapsed")
 
         if not operation.done:
             return {
@@ -312,42 +284,42 @@ def generate_video_veo3(
                 "success": False
             }
 
-        # Extract video from operation response
-        video_data = operation.response.generated_videos[0].video
+        # Get generated video
+        generated_video = operation.response.generated_videos[0]
 
         # Save video
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"veo3_{timestamp}.mp4"
+        filename = f"veo_{timestamp}.mp4"
         filepath = OUTPUT_DIR / filename
 
-        # Write video bytes to file
-        with open(filepath, 'wb') as f:
-            f.write(video_data)
+        # Download and save video
+        genai_client.files.download(file=generated_video.video)
+        generated_video.video.save(str(filepath))
 
-        # Calculate cost based on duration (Veo 3: $0.75/second)
+        # Calculate cost based on duration (Veo 3.1: $0.75/second)
         cost = 0.75 * duration_seconds
 
         return {
             "success": True,
             "video_path": str(filepath.absolute()),
             "filename": filename,
-            "model": "veo-3.0-generate-001",
+            "model": "veo-3.1-generate-preview",
             "prompt": prompt,
             "duration_seconds": duration_seconds,
             "resolution": resolution,
             "aspect_ratio": aspect_ratio,
             "fps": 24,  # Veo 3 generates at 24fps
-            "has_audio": True,  # Veo 3.0 and 3.1 natively generate audio
+            "has_audio": True,  # Veo 3.1 natively generates audio
             "estimated_cost_usd": round(cost, 2),
             "timestamp": timestamp,
-            "note": "Video includes SynthID watermarking and audio generation"
+            "note": "Video includes SynthID watermarking and native audio generation"
         }
 
     except Exception as e:
         return {
             "success": False,
             "error": str(e),
-            "model": "veo-3.0-generate-001"
+            "model": "veo-3.1-generate-preview"
         }
 
 
