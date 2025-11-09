@@ -662,21 +662,108 @@ def generate_social_media_image(
         # Upload to Instagram API using result["base64_data"]
     """
     try:
-        # Platform dimension mapping
+        # Platform specifications from Airtable (Synapse Testing base)
+        # Source: apprJV9UhYEDNL6J7/tblofKJLzBEcm3Ijr
         PLATFORM_SPECS = {
-            "instagram_feed": {"aspect_ratio": "1:1", "note": "Instagram square post"},
-            "instagram_story": {"aspect_ratio": "9:16", "note": "Instagram/Facebook story"},
-            "instagram_reel": {"aspect_ratio": "9:16", "note": "Instagram Reels cover"},
-            "facebook_post": {"aspect_ratio": "16:9", "note": "Facebook feed post"},
-            "facebook_story": {"aspect_ratio": "9:16", "note": "Facebook story"},
-            "twitter_post": {"aspect_ratio": "16:9", "note": "Twitter/X feed post"},
-            "linkedin_post": {"aspect_ratio": "16:9", "note": "LinkedIn feed post"},
-            "pinterest_pin": {"aspect_ratio": "3:4", "note": "Pinterest standard pin"},
-            "youtube_thumbnail": {"aspect_ratio": "16:9", "note": "YouTube video thumbnail"},
-            "tiktok_cover": {"aspect_ratio": "9:16", "note": "TikTok video cover"},
-            "website_hero": {"aspect_ratio": "16:9", "note": "Website hero section"},
-            "blog_featured": {"aspect_ratio": "16:9", "note": "Blog featured image"},
-            "email_header": {"aspect_ratio": "16:9", "note": "Email header image"},
+            # Instagram (1:1 primary, max 2200 chars, 30 hashtags, 30MB, 10 image carousel)
+            "instagram_feed": {
+                "aspect_ratio": "1:1",
+                "note": "Instagram square feed post",
+                "max_chars": 2200,
+                "max_hashtags": 30,
+                "max_size_mb": 30,
+                "caption_style": "Short, engaging with emojis; hashtags at end"
+            },
+            "instagram_story": {
+                "aspect_ratio": "9:16",
+                "note": "Instagram story (15s video max)",
+                "max_chars": 2200,
+                "max_size_mb": 30
+            },
+            "instagram_reel": {
+                "aspect_ratio": "9:16",
+                "note": "Instagram Reels cover (60s video max)",
+                "max_chars": 2200,
+                "max_size_mb": 30
+            },
+
+            # Facebook (4:5 or 1:1 images, 16:9 videos, max 63206 chars, 10 hashtags, 4GB)
+            "facebook_post": {
+                "aspect_ratio": "4:5",  # Primary for images
+                "alt_aspect_ratio": "1:1",
+                "note": "Facebook feed post (images 4:5 or 1:1)",
+                "max_chars": 63206,
+                "max_hashtags": 10,
+                "max_size_gb": 4,
+                "caption_style": "Casual and engaging; hashtags at end"
+            },
+            "facebook_story": {
+                "aspect_ratio": "9:16",
+                "note": "Facebook story",
+                "max_chars": 63206,
+                "max_size_gb": 4
+            },
+
+            # Twitter/X (1:1 or 16:9, 280 chars STRICT, 2 hashtags, 4 images max, 5MB)
+            "twitter_post": {
+                "aspect_ratio": "16:9",
+                "alt_aspect_ratio": "1:1",
+                "note": "Twitter/X feed post (max 4 images, 2m20s video)",
+                "max_chars": 280,  # STRICT LIMIT
+                "max_hashtags": 2,
+                "max_size_mb": 5,
+                "max_images": 4,
+                "caption_style": "Concise with inline hashtags; brevity critical"
+            },
+
+            # LinkedIn (1:1 or 16:9, max 3000 chars, 5 hashtags, 100MB)
+            "linkedin_post": {
+                "aspect_ratio": "1:1",
+                "alt_aspect_ratio": "16:9",
+                "note": "LinkedIn feed post (10 min video max)",
+                "max_chars": 3000,
+                "max_hashtags": 5,
+                "max_size_mb": 100,
+                "caption_style": "Professional and detailed; hashtags end or inline"
+            },
+
+            # YouTube (16:9, 240 min videos, 128GB)
+            "youtube_thumbnail": {
+                "aspect_ratio": "16:9",
+                "note": "YouTube video thumbnail",
+                "max_size_gb": 128,
+                "caption_style": "Short, engaging descriptions with links"
+            },
+
+            # TikTok (9:16 vertical, max 150 chars, 3 hashtags, 287MB, 10 min videos)
+            "tiktok_cover": {
+                "aspect_ratio": "9:16",
+                "note": "TikTok video cover (10 min video max)",
+                "max_chars": 150,
+                "max_hashtags": 3,
+                "max_size_mb": 287,
+                "caption_style": "Minimal captions; focus on video content"
+            },
+
+            # Pinterest (3:4 vertical for pins)
+            "pinterest_pin": {
+                "aspect_ratio": "3:4",
+                "note": "Pinterest standard pin (2:3 preferred)",
+            },
+
+            # Generic web/email formats
+            "website_hero": {
+                "aspect_ratio": "16:9",
+                "note": "Website hero section"
+            },
+            "blog_featured": {
+                "aspect_ratio": "16:9",
+                "note": "Blog featured image"
+            },
+            "email_header": {
+                "aspect_ratio": "16:9",
+                "note": "Email header image"
+            },
         }
 
         if platform not in PLATFORM_SPECS:
@@ -775,7 +862,17 @@ def generate_social_media_image(
             "model": model_version,
             "style": style,
             "timestamp": datetime.now().isoformat(),
-            "usage_note": "Image ready for direct upload to platform API - no URL needed!"
+            "usage_note": "Image ready for direct upload to platform API - no URL needed!",
+            # Platform-specific limits from Airtable
+            "platform_limits": {
+                "max_chars": spec.get("max_chars"),
+                "max_hashtags": spec.get("max_hashtags"),
+                "max_size_mb": spec.get("max_size_mb"),
+                "max_size_gb": spec.get("max_size_gb"),
+                "max_images": spec.get("max_images"),
+                "caption_style": spec.get("caption_style"),
+                "alt_aspect_ratio": spec.get("alt_aspect_ratio")
+            }
         }
 
         # Add base64 encoding if requested (for direct platform upload)
