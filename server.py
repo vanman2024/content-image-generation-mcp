@@ -797,6 +797,121 @@ def generate_social_media_image(
 
 
 @mcp.tool()
+def batch_generate_social_set(
+    description: str,
+    platforms: List[str],
+    primary_text: Optional[str] = None,
+    style: str = "photorealistic",
+    include_base64: bool = True,
+    model_version: str = "imagen-4.0"
+) -> Dict[str, Any]:
+    """
+    Generate a complete social media campaign across multiple platforms in one call.
+
+    Perfect for launching coordinated campaigns with platform-optimized images
+    for Instagram, Facebook, Twitter, LinkedIn, Pinterest, etc.
+
+    Args:
+        description: Scene description for all images
+        platforms: List of platforms (e.g., ["instagram_feed", "twitter_post", "linkedin_post"])
+        primary_text: Optional text for all images
+        style: Image style for all platforms
+        include_base64: Include base64 encoding for all images (default: True)
+        model_version: "imagen-3.0" or "imagen-4.0" (default: "imagen-4.0")
+
+    Returns:
+        Dictionary with results for each platform, total cost, and summary
+
+    Example:
+        # Generate complete campaign
+        result = batch_generate_social_set(
+            description="bear in pool with sunglasses and Coke",
+            platforms=["instagram_feed", "twitter_post", "pinterest_pin"],
+            primary_text="Summer Vibes",
+            style="photorealistic"
+        )
+
+        # Access individual platform results
+        instagram_data = result["results"]["instagram_feed"]
+        twitter_data = result["results"]["twitter_post"]
+
+        # Upload to each platform
+        instagram_api.create_post(image_data=instagram_data["base64_data"])
+        twitter_api.create_post(image_data=twitter_data["base64_data"])
+    """
+    try:
+        logger.info(f"Starting batch generation for {len(platforms)} platforms")
+
+        results = {}
+        successful = 0
+        failed = 0
+        total_cost = 0.0
+        failed_platforms = []
+
+        # Generate for each platform
+        for i, platform in enumerate(platforms, 1):
+            logger.info(f"Generating {i}/{len(platforms)}: {platform}")
+
+            result = generate_social_media_image(
+                platform=platform,
+                description=description,
+                primary_text=primary_text,
+                style=style,
+                include_base64=include_base64,
+                model_version=model_version
+            )
+
+            results[platform] = result
+
+            if result.get("success"):
+                successful += 1
+                total_cost += result.get("estimated_cost_usd", 0)
+            else:
+                failed += 1
+                failed_platforms.append(platform)
+
+        # Build summary
+        summary = {
+            "success": True,
+            "total_platforms": len(platforms),
+            "successful": successful,
+            "failed": failed,
+            "failed_platforms": failed_platforms,
+            "results": results,
+            "total_cost_usd": round(total_cost, 4),
+            "model": model_version,
+            "style": style,
+            "timestamp": datetime.now().isoformat(),
+            "campaign_description": description
+        }
+
+        # Add file paths summary
+        if successful > 0:
+            summary["generated_files"] = [
+                {
+                    "platform": platform,
+                    "file": result.get("filename"),
+                    "path": result.get("local_path"),
+                    "has_base64": "base64_data" in result
+                }
+                for platform, result in results.items()
+                if result.get("success")
+            ]
+
+        logger.info(f"Batch generation complete: {successful}/{len(platforms)} successful")
+
+        return summary
+
+    except Exception as e:
+        logger.error(f"Batch generation failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "platforms": platforms
+        }
+
+
+@mcp.tool()
 def calculate_cost_estimate(
     images_1k: int = 0,
     images_2k: int = 0,
