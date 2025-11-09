@@ -184,8 +184,8 @@ def generate_image_imagen3(
 def batch_generate_images(
     prompts: List[str],
     aspect_ratio: str = "1:1",
-    quality: str = "hd",
-    model_version: str = "imagen3",
+    image_size: str = "1K",
+    model_version: str = "imagen-3.0",
 ) -> Dict[str, Any]:
     """
     Generate multiple marketing images in batch.
@@ -193,8 +193,8 @@ def batch_generate_images(
     Args:
         prompts: List of image prompts
         aspect_ratio: Image aspect ratio for all images
-        quality: Image quality (sd or hd)
-        model_version: Model to use (imagen3 or imagen4)
+        image_size: Image size - "1K" or "2K"
+        model_version: Model to use - "imagen-3.0" or "imagen-4.0"
 
     Returns:
         Dictionary with list of generated images and total cost
@@ -208,7 +208,8 @@ def batch_generate_images(
         result = generate_image_imagen3(
             prompt=prompt,
             aspect_ratio=aspect_ratio,
-            quality=quality
+            image_size=image_size,
+            model_version=model_version
         )
 
         results.append({

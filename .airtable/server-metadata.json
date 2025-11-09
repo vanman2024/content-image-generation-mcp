@@ -1,0 +1,10 @@
+{
+  "airtable_id": "recSJLUXGrI9fQNkf",
+  "server_name": "mcp__content-image-generation",
+  "description": "AI content and image generation (Google Imagen, Gemini)",
+  "deployment_method": "Python Script",
+  "fastmcp_cloud_status": "Not Deployed",
+  "fastmcp_cloud_url": null,
+  "environment_variables": "GOOGLE_CLOUD_PROJECT\nANTHROPIC_API_KEY\nGOOGLE_API_KEY",
+  "connection": "python /home/gotime2022/.claude/plugins/marketplaces/mcp-servers-marketplace/servers/content-media/content-image-generation-mcp/src/server.py"
+}

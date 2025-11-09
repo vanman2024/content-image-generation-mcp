@@ -1,0 +1,291 @@
+{
+  "name": "Content & Image Generation",
+  "instructions": null,
+  "fastmcp_version": "2.10.5",
+  "mcp_version": "1.12.0",
+  "server_version": "2.10.5",
+  "tools": [
+    {
+      "key": "generate_image_imagen3",
+      "name": "generate_image_imagen3",
+      "description": "Generate marketing images using Google Imagen 3/4 via Gemini API.\n\nArgs:\n    prompt: Detailed description of the image to generate (max 480 tokens)\n    negative_prompt: What to avoid in the image\n    aspect_ratio: Image aspect ratio - \"1:1\", \"3:4\", \"4:3\", \"9:16\", \"16:9\"\n    number_of_images: Number of images to generate (1-4)\n    image_size: Image size - \"1K\" or \"2K\" (2K only for Standard/Ultra models)\n    output_format: Output format (png, jpeg, webp)\n    model_version: Model to use - \"imagen-3.0\" or \"imagen-4.0\"\n\nReturns:\n    Dictionary with image paths, metadata, and estimated cost",
+      "input_schema": {
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "negative_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Negative Prompt"
+          },
+          "aspect_ratio": {
+            "default": "1:1",
+            "title": "Aspect Ratio",
+            "type": "string"
+          },
+          "number_of_images": {
+            "default": 1,
+            "title": "Number Of Images",
+            "type": "integer"
+          },
+          "image_size": {
+            "default": "1K",
+            "title": "Image Size",
+            "type": "string"
+          },
+          "output_format": {
+            "default": "png",
+            "title": "Output Format",
+            "type": "string"
+          },
+          "model_version": {
+            "default": "imagen-3.0",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "annotations": null,
+      "tags": null,
+      "enabled": true
+    },
+    {
+      "key": "batch_generate_images",
+      "name": "batch_generate_images",
+      "description": "Generate multiple marketing images in batch.\n\nArgs:\n    prompts: List of image prompts\n    aspect_ratio: Image aspect ratio for all images\n    quality: Image quality (sd or hd)\n    model_version: Model to use (imagen3 or imagen4)\n\nReturns:\n    Dictionary with list of generated images and total cost",
+      "input_schema": {
+        "properties": {
+          "prompts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prompts",
+            "type": "array"
+          },
+          "aspect_ratio": {
+            "default": "1:1",
+            "title": "Aspect Ratio",
+            "type": "string"
+          },
+          "quality": {
+            "default": "hd",
+            "title": "Quality",
+            "type": "string"
+          },
+          "model_version": {
+            "default": "imagen3",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompts"
+        ],
+        "type": "object"
+      },
+      "annotations": null,
+      "tags": null,
+      "enabled": true
+    },
+    {
+      "key": "generate_video_veo3",
+      "name": "generate_video_veo3",
+      "description": "Generate marketing videos using Google Veo 3 via Gemini API.\n\nArgs:\n    prompt: Detailed description of the video to generate (supports audio cues)\n    duration_seconds: Video duration - 4, 6, or 8 seconds (default: 8)\n    resolution: Video resolution - \"720p\" or \"1080p\" (1080p limited to 8s)\n    aspect_ratio: Video aspect ratio - \"16:9\" or \"9:16\" (default: \"16:9\")\n    negative_prompt: Elements to exclude from the video\n\nReturns:\n    Dictionary with video path, metadata, and estimated cost",
+      "input_schema": {
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "default": 8,
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
+          "resolution": {
+            "default": "720p",
+            "title": "Resolution",
+            "type": "string"
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "title": "Aspect Ratio",
+            "type": "string"
+          },
+          "negative_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Negative Prompt"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "annotations": null,
+      "tags": null,
+      "enabled": true
+    },
+    {
+      "key": "generate_marketing_content",
+      "name": "generate_marketing_content",
+      "description": "Generate marketing content using Claude or Gemini.\n\nArgs:\n    content_type: Type of content (social_post, blog_intro, ad_copy, email_subject, product_desc)\n    topic: Content topic or product description\n    tone: Content tone (professional, casual, enthusiastic, formal)\n    length: Content length (short, medium, long)\n    model: AI model to use (claude, gemini)\n    include_hashtags: Include relevant hashtags (for social content)\n\nReturns:\n    Dictionary with generated content, metadata, and estimated cost",
+      "input_schema": {
+        "properties": {
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          },
+          "tone": {
+            "default": "professional",
+            "title": "Tone",
+            "type": "string"
+          },
+          "length": {
+            "default": "medium",
+            "title": "Length",
+            "type": "string"
+          },
+          "model": {
+            "default": "claude",
+            "title": "Model",
+            "type": "string"
+          },
+          "include_hashtags": {
+            "default": true,
+            "title": "Include Hashtags",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "content_type",
+          "topic"
+        ],
+        "type": "object"
+      },
+      "annotations": null,
+      "tags": null,
+      "enabled": true
+    },
+    {
+      "key": "calculate_cost_estimate",
+      "name": "calculate_cost_estimate",
+      "description": "Calculate estimated costs for a marketing campaign.\n\nArgs:\n    images_1k: Number of 1K resolution images\n    images_2k: Number of 2K resolution images\n    video_seconds: Total seconds of video\n    content_pieces: Number of content pieces (avg 500 tokens each)\n    image_model: Image model - \"imagen-3.0\" or \"imagen-4.0\"\n    video_model: Video model - \"veo2\", \"veo3\", or \"veo3_fast\"\n\nReturns:\n    Dictionary with detailed cost breakdown",
+      "input_schema": {
+        "properties": {
+          "images_1k": {
+            "default": 0,
+            "title": "Images 1K",
+            "type": "integer"
+          },
+          "images_2k": {
+            "default": 0,
+            "title": "Images 2K",
+            "type": "integer"
+          },
+          "video_seconds": {
+            "default": 0,
+            "title": "Video Seconds",
+            "type": "integer"
+          },
+          "content_pieces": {
+            "default": 0,
+            "title": "Content Pieces",
+            "type": "integer"
+          },
+          "image_model": {
+            "default": "imagen-3.0",
+            "title": "Image Model",
+            "type": "string"
+          },
+          "video_model": {
+            "default": "veo3",
+            "title": "Video Model",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "annotations": null,
+      "tags": null,
+      "enabled": true
+    }
+  ],
+  "prompts": [
+    {
+      "key": "campaign_planner",
+      "name": "campaign_planner",
+      "description": "Generate a comprehensive marketing campaign plan.",
+      "arguments": null,
+      "tags": null,
+      "enabled": true
+    },
+    {
+      "key": "image_prompt_enhancer",
+      "name": "image_prompt_enhancer",
+      "description": "Enhance image generation prompts for better results.",
+      "arguments": null,
+      "tags": null,
+      "enabled": true
+    }
+  ],
+  "resources": [
+    {
+      "key": "config://pricing",
+      "uri": "config://pricing",
+      "name": "get_pricing_info",
+      "description": "Get current pricing information for all services.",
+      "mime_type": "text/plain",
+      "tags": null,
+      "enabled": true
+    },
+    {
+      "key": "config://models",
+      "uri": "config://models",
+      "name": "get_available_models",
+      "description": "Get information about available AI models.",
+      "mime_type": "text/plain",
+      "tags": null,
+      "enabled": true
+    }
+  ],
+  "templates": [],
+  "capabilities": {
+    "tools": {
+      "listChanged": true
+    },
+    "resources": {
+      "subscribe": false,
+      "listChanged": false
+    },
+    "prompts": {
+      "listChanged": false
+    },
+    "logging": {}
+  }
+}
