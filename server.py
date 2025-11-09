@@ -616,6 +616,187 @@ def enhance_prompt_for_photorealism(
 
 
 @mcp.tool()
+def generate_social_media_image(
+    platform: str,
+    description: str,
+    primary_text: Optional[str] = None,
+    style: str = "photorealistic",
+    include_base64: bool = True,
+    model_version: str = "imagen-4.0"
+) -> Dict[str, Any]:
+    """
+    Generate platform-optimized social media images ready for direct upload.
+
+    NO URL NEEDED - Returns base64 data for direct platform upload!
+    Perfect for Instagram, Facebook, Twitter, LinkedIn, Pinterest, etc.
+
+    Platform Presets (automatically sets correct dimensions):
+    - "instagram_feed" → 1:1 square (1024x1024)
+    - "instagram_story" → 9:16 vertical (768x1280)
+    - "facebook_post" → 16:9 landscape (1280x768)
+    - "twitter_post" → 16:9 landscape (1280x768)
+    - "linkedin_post" → 16:9 landscape (1280x768)
+    - "pinterest_pin" → 3:4 vertical (768x1024)
+    - "youtube_thumbnail" → 16:9 landscape (1280x768)
+    - "website_hero" → 16:9 landscape (1280x768)
+    - "email_header" → 16:9 landscape (1280x768)
+
+    Args:
+        platform: Platform preset (e.g., "instagram_feed", "twitter_post")
+        description: Scene description for image generation
+        primary_text: Optional text to mention in prompt (compositional guidance)
+        style: Image style - "photorealistic", "modern_minimal", "bold_vibrant", "elegant"
+        include_base64: Include base64 encoding for direct upload (default: True)
+        model_version: "imagen-3.0" or "imagen-4.0" (default: "imagen-4.0")
+
+    Returns:
+        Dictionary with local_path, base64_data (if enabled), dimensions, and metadata
+
+    Example:
+        result = generate_social_media_image(
+            platform="instagram_feed",
+            description="bear in pool with sunglasses and Coke",
+            primary_text="Summer Vibes",
+            style="photorealistic"
+        )
+        # Upload to Instagram API using result["base64_data"]
+    """
+    try:
+        # Platform dimension mapping
+        PLATFORM_SPECS = {
+            "instagram_feed": {"aspect_ratio": "1:1", "note": "Instagram square post"},
+            "instagram_story": {"aspect_ratio": "9:16", "note": "Instagram/Facebook story"},
+            "instagram_reel": {"aspect_ratio": "9:16", "note": "Instagram Reels cover"},
+            "facebook_post": {"aspect_ratio": "16:9", "note": "Facebook feed post"},
+            "facebook_story": {"aspect_ratio": "9:16", "note": "Facebook story"},
+            "twitter_post": {"aspect_ratio": "16:9", "note": "Twitter/X feed post"},
+            "linkedin_post": {"aspect_ratio": "16:9", "note": "LinkedIn feed post"},
+            "pinterest_pin": {"aspect_ratio": "3:4", "note": "Pinterest standard pin"},
+            "youtube_thumbnail": {"aspect_ratio": "16:9", "note": "YouTube video thumbnail"},
+            "tiktok_cover": {"aspect_ratio": "9:16", "note": "TikTok video cover"},
+            "website_hero": {"aspect_ratio": "16:9", "note": "Website hero section"},
+            "blog_featured": {"aspect_ratio": "16:9", "note": "Blog featured image"},
+            "email_header": {"aspect_ratio": "16:9", "note": "Email header image"},
+        }
+
+        if platform not in PLATFORM_SPECS:
+            return {
+                "success": False,
+                "error": f"Unknown platform: {platform}",
+                "supported_platforms": list(PLATFORM_SPECS.keys())
+            }
+
+        spec = PLATFORM_SPECS[platform]
+        aspect_ratio = spec["aspect_ratio"]
+
+        # Build enhanced prompt based on style
+        style_prompts = {
+            "photorealistic": (
+                "Ultra-photorealistic, professional photography. "
+                "Shot on high-end camera with natural lighting. "
+                "Hyperrealistic details, authentic textures. "
+                "No CGI, no cartoon elements."
+            ),
+            "modern_minimal": (
+                "Clean, modern, minimalist aesthetic. "
+                "Simple composition, ample negative space. "
+                "Contemporary design, professional quality."
+            ),
+            "bold_vibrant": (
+                "Bold, vibrant, eye-catching colors. "
+                "High contrast, energetic composition. "
+                "Dynamic, attention-grabbing visual."
+            ),
+            "elegant": (
+                "Elegant, sophisticated, luxurious aesthetic. "
+                "Refined composition, premium quality. "
+                "High-end editorial style."
+            )
+        }
+
+        style_addition = style_prompts.get(style, style_prompts["photorealistic"])
+
+        # Build full prompt
+        full_prompt = f"{description}. {style_addition}"
+
+        if primary_text:
+            full_prompt += f" Compositionally designed for text overlay: '{primary_text}'."
+
+        # Add platform-specific guidance
+        if "story" in platform or "reel" in platform or "tiktok" in platform:
+            full_prompt += " Vertical format optimized for mobile viewing, subject centered."
+        elif "pinterest" in platform:
+            full_prompt += " Vertical format optimized for Pinterest browsing."
+        elif "instagram_feed" in platform:
+            full_prompt += " Square format, balanced composition, mobile-optimized."
+        else:
+            full_prompt += " Horizontal format, professional composition."
+
+        logger.info(f"Generating {platform} image: {full_prompt[:100]}...")
+
+        # Generate image using Imagen
+        model_id = f"{model_version}-generate-001" if "4" in model_version else "imagen-3.0-generate-001"
+
+        response = genai_client.models.generate_images(
+            model=model_id,
+            prompt=full_prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                image_size="1K",
+                aspect_ratio=aspect_ratio,
+                person_generation="allow_adult",
+            ),
+        )
+
+        # Save locally
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{platform}_{timestamp}.png"
+        filepath = OUTPUT_DIR / filename
+
+        response.generated_images[0].image.save(str(filepath))
+
+        logger.info(f"Image saved: {filepath}")
+
+        # Get file size
+        file_size_mb = filepath.stat().st_size / (1024 * 1024)
+
+        # Calculate cost
+        cost = PRICING.get(f"imagen4_1k" if "4" in model_version else "imagen3_1k", 0.04)
+
+        result = {
+            "success": True,
+            "platform": platform,
+            "platform_note": spec["note"],
+            "aspect_ratio": aspect_ratio,
+            "local_path": str(filepath),
+            "filename": filename,
+            "file_size_mb": round(file_size_mb, 2),
+            "estimated_cost_usd": cost,
+            "model": model_version,
+            "style": style,
+            "timestamp": datetime.now().isoformat(),
+            "usage_note": "Image ready for direct upload to platform API - no URL needed!"
+        }
+
+        # Add base64 encoding if requested (for direct platform upload)
+        if include_base64:
+            with open(filepath, 'rb') as f:
+                encoded = base64.b64encode(f.read()).decode('utf-8')
+                result["base64_data"] = f"data:image/png;base64,{encoded}"
+                result["base64_size_kb"] = round(len(encoded) / 1024, 2)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Social media image generation failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "platform": platform
+        }
+
+
+@mcp.tool()
 def calculate_cost_estimate(
     images_1k: int = 0,
     images_2k: int = 0,
