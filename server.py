@@ -230,6 +230,13 @@ def generate_video_veo3(
     """
     Generate marketing videos using Google Veo 3 via Gemini API.
 
+    ⚠️ COST WARNING: Video generation is expensive!
+    - 4 seconds = $3.00
+    - 6 seconds = $4.50
+    - 8 seconds = $6.00
+
+    Consider using Veo Fast models for 50% cost reduction.
+
     Args:
         prompt: Detailed description of the video to generate (supports audio cues)
         duration_seconds: Video duration - 4, 6, or 8 seconds (default: 8)
