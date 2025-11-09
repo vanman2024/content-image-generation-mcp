@@ -326,13 +326,13 @@ Make it compelling, engaging, and ready to use for marketing purposes."""
             cost = (tokens_used / 1000) * PRICING["claude_sonnet"]
 
         elif model == "gemini" or not anthropic_client:
-            # Using Gemini Flash Latest
-            gemini_model = genai.GenerativeModel("gemini-flash-latest")
+            # Using Gemini 2.5 Flash Image
+            gemini_model = genai.GenerativeModel("gemini-2.5-flash-image")
             response = gemini_model.generate_content(prompt_base)
             content = response.text
             # Approximate token count
             tokens_used = len(content.split()) * 1.3
-            model_used = "gemini-flash-latest"
+            model_used = "gemini-2.5-flash-image"
             cost = (tokens_used / 1000) * PRICING["gemini_pro"]
 
         else:
@@ -492,8 +492,8 @@ def get_available_models() -> str:
                 "strengths": ["creative writing", "nuanced tone", "long-form content"]
             },
             "gemini": {
-                "model": "gemini-flash-latest",
-                "strengths": ["fast generation", "cost-effective", "multilingual", "multimodal"]
+                "model": "gemini-2.5-flash-image",
+                "strengths": ["image understanding", "multimodal", "fast generation", "cost-effective"]
             }
         }
     }, indent=2)
