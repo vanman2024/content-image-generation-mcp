@@ -289,7 +289,12 @@ def generate_video_veo3(
     negative_prompt: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Generate marketing videos using Google Veo 3 via Gemini API.
+    Generate marketing videos with NATIVE AUDIO using Google Veo 3 via Gemini API.
+
+    🔊 AUDIO GENERATION: Veo 3.1 automatically generates audio including:
+    - Dialogue: Use quotes in prompt: "Oh my God, there's a bear!" she exclaimed
+    - Sound effects: Describe explicitly: water splashing, bear grunting, glass clinking
+    - Ambient sounds: poolside ambiance, summer afternoon sounds, birds chirping
 
     ⚠️ COST WARNING: Video generation is expensive!
     - 4 seconds = $3.00
@@ -299,7 +304,7 @@ def generate_video_veo3(
     Consider using Veo Fast models for 50% cost reduction.
 
     Args:
-        prompt: Detailed description of the video to generate (supports audio cues)
+        prompt: Detailed description with audio cues (dialogue in quotes, sound effects described)
         duration_seconds: Video duration - 4, 6, or 8 seconds (default: 8)
         resolution: Video resolution - "720p" or "1080p" (1080p limited to 8s)
         aspect_ratio: Video aspect ratio - "16:9" or "9:16" (default: "16:9")
@@ -307,6 +312,9 @@ def generate_video_veo3(
 
     Returns:
         Dictionary with video path, metadata, and estimated cost
+
+    Note: Generated videos are saved locally. For sharing/embedding, consider integrating
+    cloud storage (Google Cloud Storage, Supabase Storage, etc.) to get public URLs.
     """
     try:
         import time
@@ -480,6 +488,130 @@ Make it compelling, engaging, and ready to use for marketing purposes."""
             "success": False,
             "error": str(e),
             "model": model
+        }
+
+
+@mcp.tool()
+def enhance_prompt_for_photorealism(
+    basic_prompt: str,
+    subject_type: str = "auto"
+) -> Dict[str, Any]:
+    """
+    Transform a basic prompt into a highly detailed photorealistic prompt for Imagen 4.0.
+
+    This tool helps achieve cinema-quality, photographic realism by adding:
+    - Professional photography terminology
+    - Lighting and camera specifications
+    - Material and texture details
+    - Composition and framing guidance
+
+    Args:
+        basic_prompt: Simple description (e.g., "bear in a pool with sunglasses")
+        subject_type: Type of subject - "animal", "person", "product", "landscape", or "auto"
+
+    Returns:
+        Dictionary with enhanced prompts for maximum photorealism
+
+    Example:
+        Input: "bear in pool with sunglasses"
+        Output: Detailed prompt with lighting, camera settings, material specs, etc.
+    """
+    try:
+        # Photorealism enhancement templates
+        photography_terms = [
+            "shot on RED Komodo 6K",
+            "85mm f/1.4 lens",
+            "natural golden hour lighting",
+            "shallow depth of field",
+            "professional color grading",
+            "cinema-quality cinematography",
+            "hyperrealistic details",
+            "8K resolution quality"
+        ]
+
+        lighting_terms = [
+            "soft natural sunlight",
+            "realistic shadows and highlights",
+            "accurate light diffusion",
+            "physically accurate lighting",
+            "natural ambient occlusion"
+        ]
+
+        material_terms = [
+            "realistic fur/skin textures",
+            "accurate material reflections",
+            "natural subsurface scattering",
+            "photographic surface details",
+            "authentic weathering and imperfections"
+        ]
+
+        composition_terms = [
+            "professional composition",
+            "balanced framing",
+            "natural perspective",
+            "realistic proportions",
+            "authentic environmental integration"
+        ]
+
+        # Build enhanced prompt
+        enhanced_parts = [
+            f"Ultra-photorealistic, cinema-quality photograph: {basic_prompt}.",
+            "Shot on RED Komodo 6K with 85mm f/1.4 prime lens.",
+            "Natural golden hour lighting with soft shadows and realistic highlights.",
+            "Hyperrealistic details: accurate fur/skin textures, material reflections, natural imperfections.",
+            "Professional color grading, shallow depth of field, 8K quality.",
+            "Authentic environmental integration with physically accurate lighting and shadows.",
+            "No CGI look, no cartoon elements, no artificial smoothing.",
+            "Pure photographic realism as if captured by a professional wildlife/commercial photographer."
+        ]
+
+        enhanced_prompt = " ".join(enhanced_parts)
+
+        # Alternative versions with different emphasis
+        alternative_1 = (
+            f"Professional editorial photograph: {basic_prompt}. "
+            "National Geographic quality, shot on medium format camera (Hasselblad H6D-100c), "
+            "natural lighting, hyperrealistic textures, authentic environmental details, "
+            "photojournalistic authenticity, zero artificial enhancement, pure documentary realism."
+        )
+
+        alternative_2 = (
+            f"Commercial photography masterpiece: {basic_prompt}. "
+            "Shot on Phase One IQ4 150MP, Schneider Kreuznach 110mm f/2.8 lens, "
+            "studio-quality natural light setup, professional retouching (minimal), "
+            "billboard-ready resolution, advertising campaign grade, "
+            "authentic product photography realism with no fantasy elements."
+        )
+
+        return {
+            "success": True,
+            "original_prompt": basic_prompt,
+            "enhanced_prompt": enhanced_prompt,
+            "alternatives": {
+                "editorial_style": alternative_1,
+                "commercial_style": alternative_2
+            },
+            "tips": [
+                "Use 'enhanced_prompt' for maximum photorealism",
+                "Avoid words like 'illustration', 'painting', 'artistic', 'fantasy'",
+                "Include specific camera models and lens specs for realism",
+                "Mention natural lighting and authentic textures",
+                "Add 'no CGI look, no cartoon elements' to prevent AI artifacts",
+                "Reference professional photography styles (editorial, commercial, documentary)"
+            ],
+            "negative_prompt_suggestions": [
+                "cartoon, illustration, painting, drawing, anime",
+                "CGI, 3D render, artificial, synthetic",
+                "oversaturated, overprocessed, filters",
+                "unrealistic, fantasy, stylized",
+                "low quality, blurry, pixelated"
+            ]
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
         }
 
 
