@@ -1,0 +1,135 @@
+{
+  "project": "staff-hive-social",
+  "description": "Social Media Campaign Orchestrator",
+  "environment": {
+    "required": {
+      "ANTHROPIC_API_KEY": {
+        "description": "Anthropic API key for Claude Agent SDK",
+        "type": "secret",
+        "required": true,
+        "example": "sk-ant-api03-..."
+      },
+      "AIRTABLE_API_KEY": {
+        "description": "Airtable API key for database access",
+        "type": "secret",
+        "required": true,
+        "example": "patXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXX"
+      },
+      "GOOGLE_API_KEY": {
+        "description": "Google API key for Imagen/Gemini (used by content-gen MCP)",
+        "type": "secret",
+        "required": true,
+        "example": "AIzaSy..."
+      }
+    },
+    "airtable": {
+      "AIRTABLE_BASE_ID": {
+        "value": "apprJV9UhYEDNL6J7",
+        "description": "Airtable base ID",
+        "readonly": true
+      },
+      "AIRTABLE_BRANDS_TABLE_ID": {
+        "value": "tblpxwdcINOGZEmt6",
+        "description": "Brands table ID",
+        "readonly": true
+      },
+      "AIRTABLE_CONTENT_PIECES_TABLE_ID": {
+        "value": "tblzI1ngh7xBdO83S",
+        "description": "Content Pieces table ID",
+        "readonly": true
+      },
+      "AIRTABLE_ASSETS_TABLE_ID": {
+        "value": "tbl06zRG6oNU1nvK0",
+        "description": "Assets table ID",
+        "readonly": true
+      },
+      "AIRTABLE_SOCIAL_MEDIA_POSTS_QUEUE_TABLE_ID": {
+        "value": "tblLDIyyoFDY7RsKp",
+        "description": "Social Media Posts Queue table ID",
+        "readonly": true
+      },
+      "AIRTABLE_PLATFORMS_TABLE_ID": {
+        "value": "tblofKJLzBEcm3Ijr",
+        "description": "Platforms table ID",
+        "readonly": true
+      }
+    },
+    "services": {
+      "CONTENT_GEN_MCP_URL": {
+        "value": "https://content.fastmcp.app/mcp",
+        "description": "Content-Image-Generation MCP server URL",
+        "readonly": true
+      },
+      "LOGO_SERVICE_URL": {
+        "value": "http://localhost:8001",
+        "description": "Logo overlay service URL",
+        "development": "http://localhost:8001",
+        "production": "https://logo-overlay-service.railway.app"
+      }
+    },
+    "server": {
+      "PORT": {
+        "value": "3000",
+        "description": "Server port",
+        "type": "number"
+      },
+      "HOST": {
+        "value": "0.0.0.0",
+        "description": "Server host"
+      },
+      "NODE_ENV": {
+        "value": "development",
+        "description": "Environment mode",
+        "options": ["development", "production", "test"]
+      }
+    },
+    "optional": {
+      "DEBUG": {
+        "value": "true",
+        "description": "Enable debug logging",
+        "type": "boolean"
+      },
+      "MAX_CAMPAIGN_COST_USD": {
+        "value": "1.00",
+        "description": "Maximum cost per campaign in USD",
+        "type": "number"
+      },
+      "COST_ALERT_THRESHOLD_USD": {
+        "value": "0.50",
+        "description": "Cost alert threshold in USD",
+        "type": "number"
+      },
+      "SESSION_STORE": {
+        "value": "memory",
+        "description": "Session storage backend",
+        "options": ["memory", "redis", "database"]
+      },
+      "SESSION_SECRET": {
+        "value": "",
+        "description": "Session encryption secret (auto-generated if empty)",
+        "type": "secret"
+      },
+      "HEALTH_CHECK_PATH": {
+        "value": "/health",
+        "description": "Health check endpoint path"
+      }
+    },
+    "future": {
+      "AYRSHARE_API_KEY": {
+        "description": "Ayrshare API key for social media posting",
+        "type": "secret",
+        "required": false
+      },
+      "SENTRY_DSN": {
+        "description": "Sentry DSN for error tracking",
+        "type": "secret",
+        "required": false
+      },
+      "REDIS_URL": {
+        "description": "Redis connection URL for caching",
+        "type": "url",
+        "required": false
+      }
+    }
+  }
+}
