@@ -2,7 +2,7 @@
   "$schema": "https://gofastmcp.com/public/schemas/fastmcp.json/v1.json",
   "name": "content-image-generation-mcp",
   "version": "1.0.0",
-  "description": "AI-powered content and image generation with Google Imagen 3/4, Veo 3, and Gemini 2.0 Flash",
+  "description": "AI-powered content and image generation with Google Imagen 3/4, Veo 3, and Gemini 2.5 Flash",
   "source": {
     "path": "server.py",
     "entrypoint": "mcp"
