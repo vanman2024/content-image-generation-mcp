@@ -1245,6 +1245,352 @@ white background, soft studio lighting, high detail, commercial quality, modern 
 What image do you want to create?"""
 
 
+# ========================================
+# AI Content Generation for Social Media
+# ========================================
+
+@mcp.tool()
+def generate_campaign_content(
+    campaign_brief: str,
+    platforms: List[str],
+    style: str = "professional",
+    hashtag_strategy: str = "industry-specific",
+    target_audience: Optional[str] = None,
+    include_cta: bool = True
+) -> Dict[str, Any]:
+    """
+    Generate platform-optimized social media content using AI.
+
+    Uses Gemini 2.5 Flash to create engaging posts with:
+    - Platform-specific character optimization
+    - AI-generated hashtags respecting platform limits
+    - Appropriate tone and style
+    - Call-to-action when requested
+
+    Perfect for creating multi-platform campaigns from a single brief.
+
+    Args:
+        campaign_brief: Campaign description (e.g., "Promote summer sale with beach theme")
+        platforms: List of platform keys (e.g., ["instagram_feed", "linkedin_post", "twitter_post"])
+        style: Content style - "professional", "casual", "humorous", "educational", "promotional"
+        hashtag_strategy: Strategy for hashtags - "industry-specific", "trending", "branded", "niche"
+        target_audience: Optional target audience description
+        include_cta: Whether to include call-to-action
+
+    Returns:
+        Dictionary with generated content for each platform including:
+        - content: The post text
+        - hashtags: List of hashtags
+        - character_count: Length validation
+        - within_limits: Boolean if content fits platform constraints
+
+    Example:
+        result = generate_campaign_content(
+            campaign_brief="Announce new AI analytics dashboard for marketing teams",
+            platforms=["linkedin_post", "twitter_post"],
+            style="professional",
+            target_audience="Marketing managers"
+        )
+    """
+    try:
+        results = []
+
+        for platform in platforms:
+            # Get platform specs
+            platform_spec = PLATFORM_SPECS.get(platform)
+            if not platform_spec:
+                logger.warning(f"Unknown platform: {platform}")
+                results.append({
+                    "platform": platform,
+                    "success": False,
+                    "error": f"Platform '{platform}' not found in PLATFORM_SPECS"
+                })
+                continue
+
+            # Build platform-specific prompt
+            prompt = f"""You are a professional social media content creator and copywriter.
+
+CAMPAIGN BRIEF:
+{campaign_brief}
+
+PLATFORM: {platform}
+STYLE: {style}
+TARGET AUDIENCE: {target_audience or "general audience"}
+
+PLATFORM CONSTRAINTS:
+- Max characters: {platform_spec.get('max_chars', 'unlimited')}
+- Max hashtags: {platform_spec.get('max_hashtags', 'unlimited')}
+- Caption style: {platform_spec.get('caption_style', 'Engaging and authentic')}
+
+HASHTAG STRATEGY: {hashtag_strategy}
+
+REQUIREMENTS:
+1. Create engaging post content that fits within the character limit
+2. Generate up to {platform_spec.get('max_hashtags', 10)} relevant hashtags
+3. Match the {style} tone and {platform_spec.get('caption_style', 'engaging')} style
+4. Include platform-appropriate emojis if suitable for {style} style
+{'5. Include a clear call-to-action' if include_cta else '5. No call-to-action needed'}
+
+OUTPUT AS JSON:
+{{
+  "content": "The complete post text (without hashtags)",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+  "cta": "Call to action text or empty string"
+}}
+
+CRITICAL RULES:
+- Content + hashtags must fit in {platform_spec.get('max_chars', 10000)} characters
+- Use EXACTLY the number of hashtags appropriate for the platform (fewer is better for LinkedIn)
+- For Instagram/Facebook: Emojis encouraged, hashtags at end
+- For LinkedIn: Professional, minimal hashtags (3-5 max), no excessive emojis
+- For Twitter: Concise, integrated hashtags, strong hook
+- DO NOT exceed character or hashtag limits
+"""
+
+            # Generate content using Gemini 2.5 Flash
+            logger.info(f"Generating content for {platform} with Gemini 2.5 Flash")
+
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-preview-0205",
+                contents=prompt,
+                config=GenerateContentConfig(
+                    temperature=0.8,
+                    max_output_tokens=1500,
+                    response_mime_type="application/json"
+                )
+            )
+
+            # Parse JSON response
+            try:
+                content_data = json.loads(response.text)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON response: {e}")
+                logger.error(f"Response text: {response.text}")
+                results.append({
+                    "platform": platform,
+                    "success": False,
+                    "error": f"Invalid JSON response from AI: {e}"
+                })
+                continue
+
+            # Build full post with hashtags
+            hashtag_string = " ".join([f"#{h.lstrip('#')}" for h in content_data.get("hashtags", [])])
+            full_content = f"{content_data.get('content', '')} {hashtag_string}".strip()
+
+            # Validate character count
+            char_count = len(full_content)
+            char_limit = platform_spec.get('max_chars', 10000)
+            within_limit = char_count <= char_limit
+
+            # Validate hashtag count
+            hashtag_count = len(content_data.get("hashtags", []))
+            hashtag_limit = platform_spec.get('max_hashtags', 30)
+            hashtags_valid = hashtag_count <= hashtag_limit
+
+            results.append({
+                "platform": platform,
+                "success": True,
+                "content": content_data.get('content', ''),
+                "hashtags": content_data.get('hashtags', []),
+                "hashtag_string": hashtag_string,
+                "cta": content_data.get('cta', ''),
+                "full_post": full_content,
+                "character_count": char_count,
+                "character_limit": char_limit,
+                "within_character_limit": within_limit,
+                "hashtag_count": hashtag_count,
+                "hashtag_limit": hashtag_limit,
+                "within_hashtag_limit": hashtags_valid,
+                "all_valid": within_limit and hashtags_valid,
+                "platform_specs": {
+                    "max_chars": char_limit,
+                    "max_hashtags": hashtag_limit,
+                    "caption_style": platform_spec.get('caption_style')
+                }
+            })
+
+            logger.info(f"Generated content for {platform}: {char_count} chars, {hashtag_count} hashtags")
+
+        # Build summary
+        successful = sum(1 for r in results if r.get("success"))
+        all_valid = sum(1 for r in results if r.get("all_valid"))
+
+        return {
+            "success": True,
+            "campaign_brief": campaign_brief,
+            "style": style,
+            "target_audience": target_audience,
+            "generated_count": len(results),
+            "successful_count": successful,
+            "valid_count": all_valid,
+            "platforms": results,
+            "ready_for_posting": all_valid == len(platforms),
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Campaign content generation failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "campaign_brief": campaign_brief,
+            "platforms": platforms
+        }
+
+
+@mcp.tool()
+def batch_generate_campaign(
+    campaign_brief: str,
+    platforms: List[str],
+    style: str = "professional",
+    target_audience: Optional[str] = None,
+    image_style: str = "photorealistic",
+    include_base64: bool = True
+) -> Dict[str, Any]:
+    """
+    Complete end-to-end campaign generation: Content + Images for all platforms.
+
+    This is the FULL AUTOMATION tool that generates:
+    1. AI-generated post content for each platform
+    2. Platform-optimized images for each platform
+    3. Ready-to-post data for Airtable/Make.com
+
+    Perfect for launching campaigns with zero manual work.
+
+    Args:
+        campaign_brief: Campaign description
+        platforms: List of platforms (e.g., ["instagram_feed", "twitter_post"])
+        style: Content style (professional, casual, humorous, etc.)
+        target_audience: Optional target audience
+        image_style: Image generation style (photorealistic, illustrated, etc.)
+        include_base64: Include base64 for direct API upload
+
+    Returns:
+        Complete campaign data ready for Airtable insertion:
+        - content: Generated post text with hashtags
+        - image: Generated image with base64 data
+        - ready_for_airtable: Structured data for table insertion
+
+    Example:
+        campaign = batch_generate_campaign(
+            campaign_brief="Promote new summer collection with beach theme",
+            platforms=["instagram_feed", "facebook_post", "pinterest_pin"],
+            style="casual",
+            target_audience="Young adults 25-35"
+        )
+
+        # Use campaign data to populate Airtable via Make.com
+        for platform_data in campaign["platforms"]:
+            create_airtable_record(
+                content=platform_data["content"]["full_post"],
+                image_base64=platform_data["image"]["base64_data"],
+                platform=platform_data["platform"]
+            )
+    """
+    try:
+        logger.info(f"Starting full campaign generation for {len(platforms)} platforms")
+
+        # Step 1: Generate content for all platforms
+        logger.info("Step 1: Generating AI content with Gemini 2.5 Flash")
+        content_result = generate_campaign_content(
+            campaign_brief=campaign_brief,
+            platforms=platforms,
+            style=style,
+            target_audience=target_audience
+        )
+
+        if not content_result.get("success"):
+            return {
+                "success": False,
+                "error": "Content generation failed",
+                "details": content_result
+            }
+
+        # Step 2: Generate images for all platforms
+        logger.info("Step 2: Generating platform-optimized images with Imagen 4.0")
+        image_result = batch_generate_social_set(
+            description=campaign_brief,
+            platforms=platforms,
+            style=image_style,
+            include_base64=include_base64
+        )
+
+        if not image_result.get("success"):
+            return {
+                "success": False,
+                "error": "Image generation failed",
+                "details": image_result
+            }
+
+        # Step 3: Combine content + images
+        logger.info("Step 3: Combining content and images")
+
+        combined_results = []
+        for platform in platforms:
+            # Find content for this platform
+            content_data = next(
+                (p for p in content_result["platforms"] if p["platform"] == platform),
+                None
+            )
+
+            # Find image for this platform
+            image_data = image_result["results"].get(platform)
+
+            if content_data and image_data:
+                combined_results.append({
+                    "platform": platform,
+                    "content": content_data,
+                    "image": image_data,
+                    "ready_for_posting": (
+                        content_data.get("all_valid", False) and
+                        image_data.get("success", False)
+                    ),
+                    "airtable_data": {
+                        "Post Content": content_data["full_post"],
+                        "Platform": platform,
+                        "Generated Hashtags": content_data["hashtag_string"],
+                        "Base64 Image": image_data.get("base64_data"),
+                        "Image Filename": image_data.get("filename"),
+                        "Character Count": content_data["character_count"],
+                        "Hashtag Count": content_data["hashtag_count"],
+                        "Content Valid": content_data["all_valid"],
+                        "Campaign Brief": campaign_brief
+                    }
+                })
+
+        # Calculate totals
+        ready_count = sum(1 for r in combined_results if r["ready_for_posting"])
+        total_cost = image_result.get("total_cost_usd", 0)  # Images cost money, Gemini is cheap
+
+        return {
+            "success": True,
+            "campaign_brief": campaign_brief,
+            "style": style,
+            "target_audience": target_audience,
+            "platforms_generated": len(combined_results),
+            "ready_for_posting": ready_count,
+            "all_ready": ready_count == len(platforms),
+            "estimated_cost_usd": round(total_cost + 0.0015, 4),  # Images + Gemini
+            "platforms": combined_results,
+            "timestamp": datetime.now().isoformat(),
+            "next_steps": [
+                "Review generated content and images",
+                "Insert data into Airtable Content Pieces and Assets tables",
+                "Create Social Media Posts Queue records",
+                "Set Status = 'Pending' to trigger posting automation"
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Full campaign generation failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "campaign_brief": campaign_brief,
+            "platforms": platforms
+        }
+
+
 if __name__ == "__main__":
     # Run server in HTTP mode for deployment
     # For local testing with Claude Desktop, use: mcp.run() for STDIO
