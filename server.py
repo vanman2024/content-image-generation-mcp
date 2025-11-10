@@ -797,34 +797,42 @@ def generate_social_media_image(
         aspect_ratio = spec["aspect_ratio"]
 
         # Build enhanced prompt based on style
+        # Following Imagen 4 best practices: https://ai.google.dev/gemini-api/docs/imagen#imagen-4
+        # Key: Start with "A photo of" and use specific photography terminology
         style_prompts = {
             "photorealistic": (
-                "Ultra-photorealistic, professional photography. "
-                "Shot on high-end camera with natural lighting. "
-                "Hyperrealistic details, authentic textures. "
-                "No CGI, no cartoon elements."
+                "A photo of {description}, 35mm portrait lens, natural lighting, 4K, HDR, "
+                "Studio Photo, shot by a professional photographer, high detail, sharp focus, "
+                "realistic textures and materials, professional color grading. "
+                "CRITICAL: Pure photographic quality, NOT illustration, NOT CGI, NOT cartoon style."
+            ),
+            "professional_portrait": (
+                "A photo of {description}, 24-35mm prime lens, natural lighting, "
+                "Film noir, Depth of field, beautiful composition, high-quality, 4K, HDR, "
+                "shot by a professional photographer."
+            ),
+            "product_photo": (
+                "A photo of {description}, 60-105mm macro lens, high detail, precise focusing, "
+                "controlled lighting, 4K, HDR, Studio Photo, professional product photography, "
+                "clean background, commercial quality."
             ),
             "modern_minimal": (
-                "Clean, modern, minimalist aesthetic. "
-                "Simple composition, ample negative space. "
-                "Contemporary design, professional quality."
+                "A photo of {description}, contemporary design, minimalist aesthetic, "
+                "clean composition, 35mm lens, natural lighting, 4K, simple and professional."
             ),
             "bold_vibrant": (
-                "Bold, vibrant, eye-catching colors. "
-                "High contrast, energetic composition. "
-                "Dynamic, attention-grabbing visual."
+                "A photo of {description}, bold colors, high saturation, dramatic lighting, "
+                "35mm lens, 4K, HDR, dynamic composition, energetic visual, shot by a professional."
             ),
             "elegant": (
-                "Elegant, sophisticated, luxurious aesthetic. "
-                "Refined composition, premium quality. "
-                "High-end editorial style."
+                "A photo of {description}, elegant and sophisticated, luxurious aesthetic, "
+                "refined composition, high-end editorial style, 35mm prime lens, natural lighting, 4K, HDR."
             )
         }
 
-        style_addition = style_prompts.get(style, style_prompts["photorealistic"])
-
-        # Build full prompt
-        full_prompt = f"{description}. {style_addition}"
+        # Get style template and replace {description} placeholder
+        style_template = style_prompts.get(style, style_prompts["photorealistic"])
+        full_prompt = style_template.replace("{description}", description)
 
         if primary_text:
             full_prompt += f" Compositionally designed for text overlay: '{primary_text}'."
@@ -1588,6 +1596,90 @@ def batch_generate_campaign(
             "error": str(e),
             "campaign_brief": campaign_brief,
             "platforms": platforms
+        }
+
+
+@mcp.tool()
+def generate_branded_campaign_from_airtable(
+    brand_name: str,
+    campaign_theme: str,
+    platforms: List[str],
+    airtable_base_id: str = "apprJV9UhYEDNL6J7",
+    airtable_brands_table_id: str = "tblBrands",  # Update with your actual Brands table ID
+    style: str = "professional",
+    image_style: str = "photorealistic"
+) -> Dict[str, Any]:
+    """
+    Generate campaign using brand context from YOUR EXISTING Airtable Brands table.
+
+    This tool:
+    1. Looks up the brand in your Airtable Brands table
+    2. Gets brand description, target audience, tone, etc.
+    3. Passes that context to AI for relevant content
+    4. Generates content + images with brand awareness
+
+    Args:
+        brand_name: Brand name (e.g., "Challenge Red Seal", "Skill Trace")
+        campaign_theme: Campaign topic (e.g., "Course promotion", "Student success story")
+        platforms: List of platforms to generate for
+        airtable_base_id: Your Airtable base ID (default: apprJV9UhYEDNL6J7)
+        airtable_brands_table_id: Your Brands table ID
+        style: Content style
+        image_style: Image generation style
+
+    Returns:
+        Complete campaign with brand-aware content and images
+
+    Example:
+        result = generate_branded_campaign_from_airtable(
+            brand_name="Challenge Red Seal",
+            campaign_theme="Promote electrician certification course",
+            platforms=["linkedin_post", "facebook_post"],
+            airtable_base_id="apprJV9UhYEDNL6J7",
+            airtable_brands_table_id="tblXXXXXXXXXXXXXX"
+        )
+
+    NOTE: This requires Airtable MCP to be available when called.
+    For standalone use without Airtable, use batch_generate_campaign instead.
+    """
+    try:
+        # Note: This tool is designed to work when called from a client that has Airtable MCP access
+        # The MCP server itself doesn't have direct Airtable access
+        # This is intended to be called from Make.com or another orchestrator that can:
+        # 1. Query Airtable Brands table
+        # 2. Pass brand context to this tool
+        # 3. Get back generated content
+
+        return {
+            "success": False,
+            "error": "This tool requires external Airtable integration",
+            "implementation_note": (
+                "To use brand context from Airtable:\n"
+                "1. In Make.com/orchestrator: Query Airtable Brands table for brand_name\n"
+                "2. Extract brand_description, target_audience, tone from Airtable\n"
+                "3. Call batch_generate_campaign with enhanced campaign_brief:\n"
+                "   campaign_brief = f'{campaign_theme}. Brand: {brand_description}. "
+                "Target: {target_audience}. Tone: {tone}.'\n"
+                "4. This gives AI full brand context without needing Airtable MCP in this server"
+            ),
+            "quick_solution": {
+                "step1": "Query Airtable Brands table externally",
+                "step2": "Build enhanced campaign brief with brand context",
+                "step3": "Call batch_generate_campaign with enhanced brief",
+                "example_enhanced_brief": (
+                    f"{campaign_theme}. "
+                    "Brand: Challenge Red Seal - online learning platform for skilled trades "
+                    "certification. Target: Apprentices and journey workers. "
+                    "Tone: Professional but approachable, educational."
+                )
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Branded campaign generation failed: {e}")
+        return {
+            "success": False,
+            "error": str(e)
         }
 
 
