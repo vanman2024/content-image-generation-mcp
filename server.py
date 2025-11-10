@@ -47,8 +47,14 @@ mcp = FastMCP(name=os.getenv("MCP_SERVER_NAME", "Content & Image Generation"))
 logger.info(f"Starting {mcp.name} server")
 
 # Configuration
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "output"))
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# Use /tmp for cloud environments (writable), fallback to local output/ for development
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "/tmp" if os.path.exists("/tmp") else "output"))
+try:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Output directory: {OUTPUT_DIR}")
+except Exception as e:
+    logger.warning(f"Could not create output directory {OUTPUT_DIR}: {e}. Files will only be available as base64.")
+    OUTPUT_DIR = None
 
 # Initialize Google Gen AI Client
 google_api_key = os.getenv("GOOGLE_API_KEY")
@@ -835,17 +841,32 @@ def generate_social_media_image(
             ),
         )
 
-        # Save locally
+        # Save to file if possible (local/development), otherwise keep in memory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{platform}_{timestamp}.png"
-        filepath = OUTPUT_DIR / filename
 
-        response.generated_images[0].image.save(str(filepath))
+        # Try to save to disk (works locally, may fail in cloud)
+        filepath = None
+        file_size_mb = 0
+        image_bytes = None
 
-        logger.info(f"Image saved: {filepath}")
+        try:
+            if OUTPUT_DIR:
+                filepath = OUTPUT_DIR / filename
+                response.generated_images[0].image.save(str(filepath))
+                logger.info(f"Image saved: {filepath}")
+                file_size_mb = filepath.stat().st_size / (1024 * 1024)
+        except Exception as e:
+            logger.warning(f"Could not save to disk: {e}. Image available as base64 only.")
 
-        # Get file size
-        file_size_mb = filepath.stat().st_size / (1024 * 1024)
+        # Always get image bytes for base64 encoding
+        from io import BytesIO
+        img_buffer = BytesIO()
+        response.generated_images[0].image.save(img_buffer, format='PNG')
+        image_bytes = img_buffer.getvalue()
+
+        if file_size_mb == 0:  # Calculate from bytes if disk save failed
+            file_size_mb = len(image_bytes) / (1024 * 1024)
 
         # Calculate cost
         cost = PRICING.get(f"imagen4_1k" if "4" in model_version else "imagen3_1k", 0.04)
@@ -855,7 +876,7 @@ def generate_social_media_image(
             "platform": platform,
             "platform_note": spec["note"],
             "aspect_ratio": aspect_ratio,
-            "local_path": str(filepath),
+            "local_path": str(filepath) if filepath else None,
             "filename": filename,
             "file_size_mb": round(file_size_mb, 2),
             "estimated_cost_usd": cost,
@@ -876,11 +897,10 @@ def generate_social_media_image(
         }
 
         # Add base64 encoding if requested (for direct platform upload)
-        if include_base64:
-            with open(filepath, 'rb') as f:
-                encoded = base64.b64encode(f.read()).decode('utf-8')
-                result["base64_data"] = f"data:image/png;base64,{encoded}"
-                result["base64_size_kb"] = round(len(encoded) / 1024, 2)
+        if include_base64 and image_bytes:
+            encoded = base64.b64encode(image_bytes).decode('utf-8')
+            result["base64_data"] = f"data:image/png;base64,{encoded}"
+            result["base64_size_kb"] = round(len(encoded) / 1024, 2)
 
         return result
 
