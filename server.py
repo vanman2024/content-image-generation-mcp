@@ -181,20 +181,34 @@ def generate_image_imagen3(
             ),
         )
 
-        # Save all images
+        # Save all images (to disk if possible, always get base64)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saved_images = []
 
         for i, generated_image in enumerate(response.generated_images):
             filename = f"imagen_{model_version}_{timestamp}_{i+1}.{output_format}"
-            filepath = OUTPUT_DIR / filename
 
-            # Save image
-            generated_image.image.save(str(filepath))
+            # Try to save to disk (works locally, may fail in cloud)
+            filepath = None
+            try:
+                if OUTPUT_DIR:
+                    filepath = OUTPUT_DIR / filename
+                    generated_image.image.save(str(filepath))
+            except Exception as e:
+                logger.warning(f"Could not save image {i+1} to disk: {e}")
+
+            # Always get base64 for cloud compatibility
+            from io import BytesIO
+            img_buffer = BytesIO()
+            generated_image.image.save(img_buffer, format=output_format.upper())
+            image_bytes = img_buffer.getvalue()
+            encoded = base64.b64encode(image_bytes).decode('utf-8')
 
             saved_images.append({
-                "image_path": str(filepath.absolute()),
-                "filename": filename
+                "image_path": str(filepath.absolute()) if filepath else None,
+                "filename": filename,
+                "base64_data": f"data:image/{output_format};base64,{encoded}",
+                "size_kb": round(len(image_bytes) / 1024, 2)
             })
 
         # Calculate cost
