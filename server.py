@@ -12,6 +12,7 @@ import os
 import json
 import base64
 import logging
+from io import BytesIO
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,13 @@ from anthropic import Anthropic
 # Google Gen AI SDK (New unified SDK for Imagen, Veo, and Gemini)
 from google import genai
 from google.genai import types
+
+# Supabase for cloud storage (optional, for persistent image storage)
+try:
+    from supabase import create_client, Client
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    SUPABASE_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -80,6 +88,164 @@ if os.getenv("ANTHROPIC_API_KEY"):
 else:
     logger.info("Anthropic API key not provided - Claude content generation will be unavailable")
 
+# Initialize Supabase client for cloud storage (optional)
+supabase_client: Optional[Client] = None
+SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "generated-images")
+if SUPABASE_AVAILABLE:
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    if supabase_url and supabase_key:
+        try:
+            supabase_client = create_client(supabase_url, supabase_key)
+            logger.info(f"Supabase client initialized - storage bucket: {SUPABASE_STORAGE_BUCKET}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Supabase client: {e}")
+    else:
+        logger.info("Supabase URL/KEY not provided - cloud storage will be unavailable")
+
+
+def upload_to_supabase_storage(
+    image_bytes: bytes,
+    filename: str,
+    content_type: str = "image/png"
+) -> Optional[Dict[str, str]]:
+    """
+    Upload image bytes to Supabase Storage and return public URL.
+
+    Args:
+        image_bytes: Raw image bytes to upload
+        filename: Name for the file in storage
+        content_type: MIME type (default: image/png)
+
+    Returns:
+        Dictionary with 'path' and 'public_url' on success, None on failure
+    """
+    if not supabase_client:
+        logger.warning("Supabase client not available for storage upload")
+        return None
+
+    try:
+        # Generate unique path: generated-images/2025/01/filename
+        date_prefix = datetime.now().strftime("%Y/%m")
+        storage_path = f"{date_prefix}/{filename}"
+
+        # Upload to Supabase Storage
+        response = supabase_client.storage.from_(SUPABASE_STORAGE_BUCKET).upload(
+            path=storage_path,
+            file=image_bytes,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+
+        # Get public URL
+        public_url = supabase_client.storage.from_(SUPABASE_STORAGE_BUCKET).get_public_url(storage_path)
+
+        logger.info(f"Uploaded to Supabase Storage: {storage_path}")
+        return {
+            "path": storage_path,
+            "public_url": public_url,
+            "bucket": SUPABASE_STORAGE_BUCKET
+        }
+    except Exception as e:
+        logger.error(f"Failed to upload to Supabase Storage: {e}")
+        return None
+
+
+# Platform specifications (moved to module level for reuse across tools)
+# Source: Airtable Synapse Testing base - apprJV9UhYEDNL6J7/tblofKJLzBEcm3Ijr
+PLATFORM_SPECS = {
+    # Instagram (1:1 primary, max 2200 chars, 30 hashtags, 30MB, 10 image carousel)
+    "instagram_feed": {
+        "aspect_ratio": "1:1",
+        "note": "Instagram square feed post",
+        "max_chars": 2200,
+        "max_hashtags": 30,
+        "max_size_mb": 30,
+        "caption_style": "Short, engaging with emojis; hashtags at end"
+    },
+    "instagram_story": {
+        "aspect_ratio": "9:16",
+        "note": "Instagram story (15s video max)",
+        "max_chars": 2200,
+        "max_size_mb": 30
+    },
+    "instagram_reel": {
+        "aspect_ratio": "9:16",
+        "note": "Instagram Reels cover (60s video max)",
+        "max_chars": 2200,
+        "max_size_mb": 30
+    },
+    # Facebook (4:5 or 1:1 images, 16:9 videos, max 63206 chars, 10 hashtags, 4GB)
+    "facebook_post": {
+        "aspect_ratio": "4:5",
+        "alt_aspect_ratio": "1:1",
+        "note": "Facebook feed post (images 4:5 or 1:1)",
+        "max_chars": 63206,
+        "max_hashtags": 10,
+        "max_size_gb": 4,
+        "caption_style": "Casual and engaging; hashtags at end"
+    },
+    "facebook_story": {
+        "aspect_ratio": "9:16",
+        "note": "Facebook story",
+        "max_chars": 63206,
+        "max_size_gb": 4
+    },
+    # Twitter/X (1:1 or 16:9, 280 chars STRICT, 2 hashtags, 4 images max, 5MB)
+    "twitter_post": {
+        "aspect_ratio": "16:9",
+        "alt_aspect_ratio": "1:1",
+        "note": "Twitter/X feed post (max 4 images, 2m20s video)",
+        "max_chars": 280,
+        "max_hashtags": 2,
+        "max_size_mb": 5,
+        "max_images": 4,
+        "caption_style": "Concise with inline hashtags; brevity critical"
+    },
+    # LinkedIn (1:1 or 16:9, max 3000 chars, 5 hashtags, 100MB)
+    "linkedin_post": {
+        "aspect_ratio": "1:1",
+        "alt_aspect_ratio": "16:9",
+        "note": "LinkedIn feed post (10 min video max)",
+        "max_chars": 3000,
+        "max_hashtags": 5,
+        "max_size_mb": 100,
+        "caption_style": "Professional and detailed; hashtags end or inline"
+    },
+    # YouTube (16:9, 240 min videos, 128GB)
+    "youtube_thumbnail": {
+        "aspect_ratio": "16:9",
+        "note": "YouTube video thumbnail",
+        "max_size_gb": 128,
+        "caption_style": "Short, engaging descriptions with links"
+    },
+    # TikTok (9:16 vertical, max 150 chars, 3 hashtags, 287MB, 10 min videos)
+    "tiktok_cover": {
+        "aspect_ratio": "9:16",
+        "note": "TikTok video cover (10 min video max)",
+        "max_chars": 150,
+        "max_hashtags": 3,
+        "max_size_mb": 287,
+        "caption_style": "Minimal captions; focus on video content"
+    },
+    # Pinterest (3:4 vertical for pins)
+    "pinterest_pin": {
+        "aspect_ratio": "3:4",
+        "note": "Pinterest standard pin (2:3 preferred)",
+    },
+    # Generic web/email formats
+    "website_hero": {
+        "aspect_ratio": "16:9",
+        "note": "Website hero section"
+    },
+    "blog_featured": {
+        "aspect_ratio": "16:9",
+        "note": "Blog featured image"
+    },
+    "email_header": {
+        "aspect_ratio": "16:9",
+        "note": "Email header image"
+    },
+}
 
 # Pricing Constants (USD per unit) - Updated from official docs
 PRICING = {
@@ -138,6 +304,7 @@ def generate_image_imagen3(
     image_size: str = "1K",
     output_format: str = "png",
     model_version: str = "imagen-4.0",
+    upload_to_supabase: bool = True,
 ) -> Dict[str, Any]:
     """
     Generate marketing images using Google Imagen via Gemini API.
@@ -150,9 +317,10 @@ def generate_image_imagen3(
         image_size: Image size - "1K" or "2K"
         output_format: Output format (png, jpeg)
         model_version: Model - "imagen-3.0", "imagen-4.0", "imagen-4.0-ultra", "imagen-4.0-fast"
+        upload_to_supabase: Upload images to Supabase Storage for public URLs (default: True)
 
     Returns:
-        Dictionary with image paths, metadata, and estimated cost
+        Dictionary with image paths, public_url (if Supabase enabled), base64 data, and estimated cost
     """
     logger.info(f"Generating {number_of_images} image(s) with {model_version}: {prompt[:50]}...")
     try:
@@ -188,28 +356,43 @@ def generate_image_imagen3(
         for i, generated_image in enumerate(response.generated_images):
             filename = f"imagen_{model_version}_{timestamp}_{i+1}.{output_format}"
 
+            # Get image bytes from the SDK response (correct API access)
+            image_bytes = generated_image.image.image_bytes
+
             # Try to save to disk (works locally, may fail in cloud)
             filepath = None
             try:
                 if OUTPUT_DIR:
                     filepath = OUTPUT_DIR / filename
-                    generated_image.image.save(str(filepath))
+                    with open(filepath, 'wb') as f:
+                        f.write(image_bytes)
+                    logger.info(f"Saved image {i+1} to disk: {filepath}")
             except Exception as e:
                 logger.warning(f"Could not save image {i+1} to disk: {e}")
 
-            # Always get base64 for cloud compatibility
-            from io import BytesIO
-            img_buffer = BytesIO()
-            generated_image.image.save(img_buffer, format=output_format.upper())
-            image_bytes = img_buffer.getvalue()
+            # Upload to Supabase Storage for public URL
+            supabase_result = None
+            if upload_to_supabase:
+                content_type = f"image/{output_format}"
+                supabase_result = upload_to_supabase_storage(image_bytes, filename, content_type)
+
+            # Get base64 for cloud compatibility
             encoded = base64.b64encode(image_bytes).decode('utf-8')
 
-            saved_images.append({
+            image_data = {
                 "image_path": str(filepath.absolute()) if filepath else None,
                 "filename": filename,
                 "base64_data": f"data:image/{output_format};base64,{encoded}",
                 "size_kb": round(len(image_bytes) / 1024, 2)
-            })
+            }
+
+            # Add Supabase URL if available
+            if supabase_result:
+                image_data["public_url"] = supabase_result["public_url"]
+                image_data["storage_path"] = supabase_result["path"]
+                image_data["storage_bucket"] = supabase_result["bucket"]
+
+            saved_images.append(image_data)
 
         # Calculate cost
         if "4.0" in model_version:
@@ -475,13 +658,19 @@ Make it compelling, engaging, and ready to use for marketing purposes."""
             cost = (tokens_used / 1000) * PRICING["claude_sonnet"]
 
         elif model == "gemini" or not anthropic_client:
-            # Using Gemini 2.5 Flash Image
-            gemini_model = genai.GenerativeModel("gemini-2.5-flash-image")
-            response = gemini_model.generate_content(prompt_base)
+            # Using Gemini 2.5 Flash via new google-genai SDK
+            response = genai_client.models.generate_content(
+                model="gemini-2.5-flash-preview-05-20",
+                contents=prompt_base,
+                config=types.GenerateContentConfig(
+                    temperature=0.8,
+                    max_output_tokens=1024
+                )
+            )
             content = response.text
             # Approximate token count
             tokens_used = len(content.split()) * 1.3
-            model_used = "gemini-2.5-flash-image"
+            model_used = "gemini-2.5-flash"
             cost = (tokens_used / 1000) * PRICING["gemini_flash"]
 
         else:
@@ -642,12 +831,13 @@ def generate_social_media_image(
     primary_text: Optional[str] = None,
     style: str = "photorealistic",
     include_base64: bool = True,
-    model_version: str = "imagen-4.0"
+    model_version: str = "imagen-4.0",
+    upload_to_supabase: bool = True,
 ) -> Dict[str, Any]:
     """
     Generate platform-optimized social media images ready for direct upload.
 
-    NO URL NEEDED - Returns base64 data for direct platform upload!
+    Returns base64 data AND public URL (via Supabase Storage) for platform uploads!
     Perfect for Instagram, Facebook, Twitter, LinkedIn, Pinterest, etc.
 
     Platform Presets (automatically sets correct dimensions):
@@ -682,110 +872,7 @@ def generate_social_media_image(
         # Upload to Instagram API using result["base64_data"]
     """
     try:
-        # Platform specifications from Airtable (Synapse Testing base)
-        # Source: apprJV9UhYEDNL6J7/tblofKJLzBEcm3Ijr
-        PLATFORM_SPECS = {
-            # Instagram (1:1 primary, max 2200 chars, 30 hashtags, 30MB, 10 image carousel)
-            "instagram_feed": {
-                "aspect_ratio": "1:1",
-                "note": "Instagram square feed post",
-                "max_chars": 2200,
-                "max_hashtags": 30,
-                "max_size_mb": 30,
-                "caption_style": "Short, engaging with emojis; hashtags at end"
-            },
-            "instagram_story": {
-                "aspect_ratio": "9:16",
-                "note": "Instagram story (15s video max)",
-                "max_chars": 2200,
-                "max_size_mb": 30
-            },
-            "instagram_reel": {
-                "aspect_ratio": "9:16",
-                "note": "Instagram Reels cover (60s video max)",
-                "max_chars": 2200,
-                "max_size_mb": 30
-            },
-
-            # Facebook (4:5 or 1:1 images, 16:9 videos, max 63206 chars, 10 hashtags, 4GB)
-            "facebook_post": {
-                "aspect_ratio": "4:5",  # Primary for images
-                "alt_aspect_ratio": "1:1",
-                "note": "Facebook feed post (images 4:5 or 1:1)",
-                "max_chars": 63206,
-                "max_hashtags": 10,
-                "max_size_gb": 4,
-                "caption_style": "Casual and engaging; hashtags at end"
-            },
-            "facebook_story": {
-                "aspect_ratio": "9:16",
-                "note": "Facebook story",
-                "max_chars": 63206,
-                "max_size_gb": 4
-            },
-
-            # Twitter/X (1:1 or 16:9, 280 chars STRICT, 2 hashtags, 4 images max, 5MB)
-            "twitter_post": {
-                "aspect_ratio": "16:9",
-                "alt_aspect_ratio": "1:1",
-                "note": "Twitter/X feed post (max 4 images, 2m20s video)",
-                "max_chars": 280,  # STRICT LIMIT
-                "max_hashtags": 2,
-                "max_size_mb": 5,
-                "max_images": 4,
-                "caption_style": "Concise with inline hashtags; brevity critical"
-            },
-
-            # LinkedIn (1:1 or 16:9, max 3000 chars, 5 hashtags, 100MB)
-            "linkedin_post": {
-                "aspect_ratio": "1:1",
-                "alt_aspect_ratio": "16:9",
-                "note": "LinkedIn feed post (10 min video max)",
-                "max_chars": 3000,
-                "max_hashtags": 5,
-                "max_size_mb": 100,
-                "caption_style": "Professional and detailed; hashtags end or inline"
-            },
-
-            # YouTube (16:9, 240 min videos, 128GB)
-            "youtube_thumbnail": {
-                "aspect_ratio": "16:9",
-                "note": "YouTube video thumbnail",
-                "max_size_gb": 128,
-                "caption_style": "Short, engaging descriptions with links"
-            },
-
-            # TikTok (9:16 vertical, max 150 chars, 3 hashtags, 287MB, 10 min videos)
-            "tiktok_cover": {
-                "aspect_ratio": "9:16",
-                "note": "TikTok video cover (10 min video max)",
-                "max_chars": 150,
-                "max_hashtags": 3,
-                "max_size_mb": 287,
-                "caption_style": "Minimal captions; focus on video content"
-            },
-
-            # Pinterest (3:4 vertical for pins)
-            "pinterest_pin": {
-                "aspect_ratio": "3:4",
-                "note": "Pinterest standard pin (2:3 preferred)",
-            },
-
-            # Generic web/email formats
-            "website_hero": {
-                "aspect_ratio": "16:9",
-                "note": "Website hero section"
-            },
-            "blog_featured": {
-                "aspect_ratio": "16:9",
-                "note": "Blog featured image"
-            },
-            "email_header": {
-                "aspect_ratio": "16:9",
-                "note": "Email header image"
-            },
-        }
-
+        # Use module-level PLATFORM_SPECS (defined at top of file)
         if platform not in PLATFORM_SPECS:
             return {
                 "success": False,
@@ -867,28 +954,25 @@ def generate_social_media_image(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{platform}_{timestamp}.png"
 
+        # Get image bytes from the SDK response (correct API access)
+        image_bytes = response.generated_images[0].image.image_bytes
+        file_size_mb = len(image_bytes) / (1024 * 1024)
+
         # Try to save to disk (works locally, may fail in cloud)
         filepath = None
-        file_size_mb = 0
-        image_bytes = None
-
         try:
             if OUTPUT_DIR:
                 filepath = OUTPUT_DIR / filename
-                response.generated_images[0].image.save(str(filepath))
+                with open(filepath, 'wb') as f:
+                    f.write(image_bytes)
                 logger.info(f"Image saved: {filepath}")
-                file_size_mb = filepath.stat().st_size / (1024 * 1024)
         except Exception as e:
             logger.warning(f"Could not save to disk: {e}. Image available as base64 only.")
 
-        # Always get image bytes for base64 encoding
-        from io import BytesIO
-        img_buffer = BytesIO()
-        response.generated_images[0].image.save(img_buffer, format='PNG')
-        image_bytes = img_buffer.getvalue()
-
-        if file_size_mb == 0:  # Calculate from bytes if disk save failed
-            file_size_mb = len(image_bytes) / (1024 * 1024)
+        # Upload to Supabase Storage for public URL
+        supabase_result = None
+        if upload_to_supabase:
+            supabase_result = upload_to_supabase_storage(image_bytes, filename, "image/png")
 
         # Calculate cost
         cost = PRICING.get(f"imagen4_1k" if "4" in model_version else "imagen3_1k", 0.04)
@@ -905,7 +989,7 @@ def generate_social_media_image(
             "model": model_version,
             "style": style,
             "timestamp": datetime.now().isoformat(),
-            "usage_note": "Image ready for direct upload to platform API - no URL needed!",
+            "usage_note": "Image ready for direct upload to platform API or use public_url!",
             # Platform-specific limits from Airtable
             "platform_limits": {
                 "max_chars": spec.get("max_chars"),
@@ -917,6 +1001,12 @@ def generate_social_media_image(
                 "alt_aspect_ratio": spec.get("alt_aspect_ratio")
             }
         }
+
+        # Add Supabase URL if available
+        if supabase_result:
+            result["public_url"] = supabase_result["public_url"]
+            result["storage_path"] = supabase_result["path"]
+            result["storage_bucket"] = supabase_result["bucket"]
 
         # Add base64 encoding if requested (for direct platform upload)
         if include_base64 and image_bytes:
@@ -1355,13 +1445,13 @@ CRITICAL RULES:
 - DO NOT exceed character or hashtag limits
 """
 
-            # Generate content using Gemini 2.5 Flash
+            # Generate content using Gemini 2.5 Flash via google-genai SDK
             logger.info(f"Generating content for {platform} with Gemini 2.5 Flash")
 
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-preview-0205",
+            response = genai_client.models.generate_content(
+                model="gemini-2.5-flash-preview-05-20",
                 contents=prompt,
-                config=GenerateContentConfig(
+                config=types.GenerateContentConfig(
                     temperature=0.8,
                     max_output_tokens=1500,
                     response_mime_type="application/json"
